@@ -10,6 +10,9 @@ from api.models import db
 from api.routes import api
 from api.admin import setup_admin
 from api.commands import setup_commands
+from api.models import db, User
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask_cors import CORS
 
 # from models import Person
 
@@ -18,6 +21,14 @@ static_file_dir = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), '../dist/')
 app = Flask(__name__)
 app.url_map.strict_slashes = False
+
+CORS(app)
+
+# Setup the Flask-JWT-Extended extension
+# Change this "super secret" to something else!
+app.config["JWT_SECRET_KEY"] = "super-secret"
+jwt = JWTManager(app)
+
 
 # database condiguration
 db_url = os.getenv("DATABASE_URL")
@@ -57,6 +68,8 @@ def sitemap():
     return send_from_directory(static_file_dir, 'index.html')
 
 # any other endpoint will try to serve it like a static file
+
+
 @app.route('/<path:path>', methods=['GET'])
 def serve_any_other_file(path):
     if not os.path.isfile(os.path.join(static_file_dir, path)):
@@ -70,3 +83,57 @@ def serve_any_other_file(path):
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 3001))
     app.run(host='0.0.0.0', port=PORT, debug=True)
+
+# Users POST
+
+
+@app.route('/users', methods=['POST'])
+def handle_person():
+    body = request.get_json()
+
+    if body is None:
+        raise APIException("request body as a json object", status_code=400)
+    if 'email' not in body:
+        raise APIException("specify email", status_code=400)
+
+    user1 = User(password=body['password'], email=body['email'])
+    db.session.add(user1)
+    db.session.commit()
+    return "ok", 200
+
+# TOKEN POST
+
+
+@app.route('/token', methods=['POST'])
+def create_token():
+
+    email = request.json.get('email', None)
+    password = request.json.get('password', None)
+
+    user = User.query.filter_by(email=email, password=password).first()
+
+    if user is None:
+        return jsonify({'msg: bad email or password'}), 401
+    access_token = create_access_token(identity=str(user.id))
+    return jsonify({'token': access_token, 'email': user.email})
+
+# USER GET
+
+
+@app.route('/users', methods=['GET'])
+def get_users():
+    all_users = User.query.all()
+    all_users = list(map(lambda x: x.serializa(), all_users))
+
+# PRIVATE GET
+
+
+@app.route('/private', methods=['GET'])
+@jwt_required()
+def private():
+    current_user = get_jwt_identity()
+    print("current_user", current_user)
+    # user = User.query.filter_by(email=current_user).first()
+    user = User.query.get(current_user)
+
+    return jsonify({"id": user.id, "email": user.email, "password": user.password})
