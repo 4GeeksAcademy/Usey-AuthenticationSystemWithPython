@@ -25,7 +25,7 @@ app.url_map.strict_slashes = False
 CORS(app)
 
 # Setup the Flask-JWT-Extended extension
-# Change this "super secret" to something else!
+
 app.config["JWT_SECRET_KEY"] = "super-secret"
 jwt = JWTManager(app)
 
